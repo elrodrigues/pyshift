@@ -2,18 +2,18 @@ import random
 import math
 
 class Trace:
-    n_days: int
-    steps_per_day: int
-    high_intensity: float
-    low_intensity: float
-    intensities: list[float]
-
-    def __init__(self, n_days, steps_per_day, high_intensity, low_intensity, intensities):
-        self.n_days = n_days
-        self.steps_per_day = steps_per_day
-        self.high_intensity = high_intensity
-        self.low_intensity = low_intensity
-        self.intensities = intensities
+    def __init__(
+        self, n_days: int,
+        steps_per_day: int,
+        high_intensity: float,
+        low_intensity: float,
+        intensities: list[float]
+    ):
+        self.n_days: int = n_days
+        self.steps_per_day: int = steps_per_day
+        self.high_intensity: float = high_intensity
+        self.low_intensity: float = low_intensity
+        self.intensities: list[float] = intensities
 
 def create_trace(days: int) -> Trace:
     # suppose we sample carbon intensity
@@ -67,19 +67,63 @@ def create_trace(days: int) -> Trace:
 
 class Environment:
     # in Gigabytes
-    job_size: float
+    # job_size: float
+
     # in Gigabits per Second
-    first_hop_link_bandwidth: float
+    # first_hop_link_bandwidth: float
+
     # in absolute steps
-    deadline: int
-    # thread-throughput curve
-    scale: float
-    limit: float
+    # deadline: int
+
+    # thread-throughput curve (in Gbps)
+    # thrpt_scale: float
+    # thrpt_limit: float
+
+    # thread-power curve in (in Watts)
+    # power_scale: float
+    # power_min_limit: float
+    # power_max_limit: float
+
+    def __init__(
+        self, job_size: float,
+        first_hop_link_band: float,
+        deadline: int
+    ):
+        self.job_size: float = job_size
+        self.first_hop_link_bandwidth: float = first_hop_link_band
+        self.deadline: int = deadline
+
+        self.thrpt_scale: float = 0.
+        self.thrpt_limit: float = 0.
+        self.power_scale: float = 0.
+        self.power_min_limit: float = 0.
+        self.power_max_limit: float = 0.
+
+    def set_throughput_curve(self, thrpt_scale: float, thrpt_limit: float):
+        self.thrpt_scale = thrpt_scale
+        self.thrpt_limit = thrpt_limit
+
+    def set_power_curve(self, power_scale: float, power_min_limit: float, power_max_limit: float):
+        self.power_scale = power_scale
+        self.power_min_limit = power_min_limit
+        self.power_max_limit = power_max_limit
 
     def thread_throughput_curve(self, thread: int) -> float:
-        throughput: float = self.limit * (1 - (1 / (self.scale * self.limit * thread + 1)))
+        throughput: float = self.thrpt_limit * (1 - (1 / (self.thrpt_scale * self.thrpt_limit * thread + 1)))
         return throughput
 
+    def throughput_thread_curve(self, thrpt: float) -> float:
+        threads: float = round(1/(self.thrpt_scale * (self.thrpt_limit - thrpt)) - 1/(self.thrpt_scale * self.thrpt_limit), 0)
+        return threads
+
+    def marginal_thread(self) -> tuple[int, float, float]:
+        threads: float = math.floor(math.sqrt(self.thrpt_scale) - 1/self.thrpt_limit)
+        return (threads, self.thread_throughput_curve(threads), self.thread_power_curve(threads))
+
+    def thread_power_curve(self, thread: int) -> float:
+        diff = self.power_max_limit - self.power_min_limit
+        power: float = diff * (1 - (1 / (self.power_scale * diff * thread + 1))) + self.power_min_limit
+        return power
 
 if __name__ == "__main__":
     print(create_trace(2))
