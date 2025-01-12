@@ -6,7 +6,7 @@ def plan_one_job_multiple_traces():
     first_hop_band = 10.0 # Gigabit per Sec
     deadline = 140 # Steps from origin
     n_days = 2 # Horizon
-    n_hops = 3 # src - connector - dst
+    n_nodes = 3 # src - connector - dst
     thrpt_scale = 1/21
     power_min_limit = 125.0
     power_max_limit = 300.0
@@ -25,12 +25,13 @@ def plan_one_job_multiple_traces():
     env.set_throughput_curve(thrpt_scale, max_throughput)
     env.set_power_curve(power_scale, power_min_limit, power_max_limit)
 
-    trace = gen.create_trace(n_days, n_hops)
+    trace = gen.create_trace(n_days, n_nodes)
     n_steps = n_days * trace.steps_per_day
     step_time = (24 / trace.steps_per_day) * 3600 # seconds
 
     intensities = np.array(trace.multi_intensities)
-    weights = np.ones(n_hops).reshape(n_hops, 1)
+    # give equal weight to all nodes
+    weights = np.ones(n_nodes).reshape(n_nodes, 1)
     # augmented_trace = np.vstack((np.arange(n_steps), intensities)).T
     intensity_sums = (weights * intensities).sum(axis=0)
     sorted_steps = intensity_sums.argsort()
