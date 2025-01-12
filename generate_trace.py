@@ -1,3 +1,4 @@
+from datetime import timezone
 import random
 import math
 
@@ -7,18 +8,22 @@ class Trace:
         steps_per_day: int,
         high_intensity: float,
         low_intensity: float,
-        intensities: list[float]
+        intensities: list[float] = [],
+        multi_intensities: list[list[float]] = [],
+        timezones: list[int] = [],
     ):
         self.n_days: int = n_days
         self.steps_per_day: int = steps_per_day
         self.high_intensity: float = high_intensity
         self.low_intensity: float = low_intensity
         self.intensities: list[float] = intensities
+        self.multi_intensities: list[list[float]] = multi_intensities
+        self.timezones: list[int] = timezones
 
-def create_trace(days: int) -> Trace:
+def create_trace(days: int, nodes: int) -> Trace:
     # suppose we sample carbon intensity
     # every 15 minutes: 24 * 4 = 96
-    intensities = [0. for _ in range(96 * days)]
+    intensities = [[0. for _ in range(96 * days)] for _ in range(nodes)]
 
     start_boundary = 0
     end_boundary = 96
@@ -29,29 +34,34 @@ def create_trace(days: int) -> Trace:
     high_intensity = high_intensity_floor + random.gauss(75.0, 25.0)
     high_intensity_dev = 0.05 * high_intensity
 
+    # 4 timezones in continental US, so
+    # set origin to West Coast, then increments of +0, +4, +8, +12
+    timezones = [4 * random.randint(0, 3) for _ in range(nodes)]
+
     for _ in range(days):
         low_intensity = low_intensity_floor + random.gauss(25.0, 5.0)
         diff = (high_intensity - low_intensity) / 2
         midpoint = (high_intensity + low_intensity) / 2
 
-        # 5 am to 7 am
-        start_solar = random.randint(20, 28) + start_boundary
-        # 7 pm to 5 pm
-        end_solar = end_boundary - start_solar + start_boundary
-        time_diff = end_solar - start_solar
+        for n in range(nodes):
+            # 5 am to 7 am + time zone differences
+            start_solar = random.randint(20, 28) + start_boundary + timezones[n]
+            # 7 pm to 5 pm
+            end_solar = end_boundary - start_solar + start_boundary + timezones[n]
+            time_diff = end_solar - start_solar
 
-        sol = lambda t : diff * math.cos(2*math.pi*(t - start_solar) / time_diff) + midpoint
+            sol = lambda t : diff * math.cos(2*math.pi*(t - start_solar) / time_diff) + midpoint
 
-        for i in range(start_boundary, start_solar):
-            intensities[i] = round(high_intensity + random.gauss(0.0, high_intensity_dev), 2)
+            for i in range(start_boundary, start_solar):
+                intensities[n][i] = round(high_intensity + random.gauss(0.0, high_intensity_dev), 2)
 
-        for i in range(end_solar, end_boundary):
-            intensities[i] = round(high_intensity + random.gauss(0.0, high_intensity_dev), 2)
+            for i in range(end_solar, end_boundary):
+                intensities[n][i] = round(high_intensity + random.gauss(0.0, high_intensity_dev), 2)
 
-        # fill in active solar times
-        for i in range(start_solar, end_solar):
-            low_int = sol(i)
-            intensities[i] = round(low_int + random.gauss(0.0, 0.1*low_int), 2)
+            # fill in active solar times
+            for i in range(start_solar, end_solar):
+                low_int = sol(i)
+                intensities[n][i] = round(low_int + random.gauss(0.0, 0.1*low_int), 2)
 
         start_boundary += 96
         end_boundary += 96
@@ -61,7 +71,8 @@ def create_trace(days: int) -> Trace:
         steps_per_day=96,
         high_intensity=high_intensity,
         low_intensity=low_intensity_floor,
-        intensities=intensities
+        multi_intensities=intensities,
+        timezones=timezones
     )
     return trace
 
@@ -126,4 +137,4 @@ class Environment:
         return power
 
 if __name__ == "__main__":
-    print(create_trace(2))
+    print(create_trace(2, 1))
