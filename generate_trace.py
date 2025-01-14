@@ -20,7 +20,7 @@ class Trace:
         self.multi_intensities: list[list[float]] = multi_intensities
         self.timezones: list[int] = timezones
 
-def create_trace(days: int, nodes: int) -> Trace:
+def create_trace(days: int, nodes: int, use_timezones: list[int] | None = None) -> Trace:
     # suppose we sample carbon intensity
     # every 15 minutes: 24 * 4 = 96
     intensities = [[0. for _ in range(96 * days)] for _ in range(nodes)]
@@ -37,6 +37,8 @@ def create_trace(days: int, nodes: int) -> Trace:
     # 4 timezones in continental US, so
     # set origin to West Coast, then increments of +0, +4, +8, +12
     timezones = [4 * random.randint(0, 3) for _ in range(nodes)]
+    if use_timezones is not None:
+        timezones = use_timezones
 
     for _ in range(days):
         low_intensity = low_intensity_floor + random.gauss(25.0, 5.0)
@@ -119,7 +121,7 @@ class Environment:
         self.power_min_limit = power_min_limit
         self.power_max_limit = power_max_limit
 
-    def thread_throughput_curve(self, thread: int) -> float:
+    def thread_throughput_curve(self, thread: int | float) -> float:
         throughput: float = self.thrpt_limit * (1 - (1 / (self.thrpt_scale * self.thrpt_limit * thread + 1)))
         return throughput
 
@@ -127,11 +129,14 @@ class Environment:
         threads: float = round(1/(self.thrpt_scale * (self.thrpt_limit - thrpt)) - 1/(self.thrpt_scale * self.thrpt_limit), 0)
         return threads
 
-    def marginal_thread(self) -> tuple[int, float, float]:
-        threads: float = math.floor(math.sqrt(self.thrpt_scale) - 1/self.thrpt_limit)
-        return (threads, self.thread_throughput_curve(threads), self.thread_power_curve(threads))
+    def marginal_thread(self, marginal_limit=0.1) -> tuple[int, float]:
+        c = marginal_limit
+        s = self.thrpt_scale
+        L = self.thrpt_limit
+        threads: float = math.floor((1 / math.sqrt(s * c)) - 1/(s*L))
+        return (threads, self.thread_throughput_curve(threads))
 
-    def thread_power_curve(self, thread: int) -> float:
+    def thread_power_curve(self, thread: int | float) -> float:
         diff = self.power_max_limit - self.power_min_limit
         power: float = diff * (1 - (1 / (self.power_scale * diff * thread + 1))) + self.power_min_limit
         return power
