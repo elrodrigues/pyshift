@@ -100,7 +100,8 @@ class Environment:
     def __init__(
         self, job_size: float,
         first_hop_link_band: float,
-        deadline: int
+        deadline: int,
+        thread_limit: int = 20,
     ):
         self.job_size: float = job_size
         self.first_hop_link_bandwidth: float = first_hop_link_band
@@ -111,6 +112,7 @@ class Environment:
         self.power_scale: float = 0.
         self.power_min_limit: float = 0.
         self.power_max_limit: float = 0.
+        self.thread_limit: int = thread_limit
 
     def set_throughput_curve(self, thrpt_scale: float, thrpt_limit: float):
         self.thrpt_scale = thrpt_scale
@@ -125,8 +127,14 @@ class Environment:
         throughput: float = self.thrpt_limit * (1 - (1 / (self.thrpt_scale * self.thrpt_limit * thread + 1)))
         return throughput
 
-    def throughput_thread_curve(self, thrpt: float) -> float:
-        threads: float = round(1/(self.thrpt_scale * (self.thrpt_limit - thrpt)) - 1/(self.thrpt_scale * self.thrpt_limit), 0)
+    def throughput_thread_curve(self, thrpt: float, use_ceil=False) -> float:
+        threads: float = thrpt / ((self.thrpt_limit * self.thrpt_scale) * (self.thrpt_limit - thrpt))
+        if use_ceil:
+            threads = math.ceil(threads)
+        else:
+            threads = round(threads, 0)
+            if thrpt > 0. and threads == 0.:
+                threads = 1
         return threads
 
     def marginal_thread(self, marginal_limit=0.1) -> tuple[int, float]:
