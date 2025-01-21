@@ -344,7 +344,7 @@ def execute_one_job_multiple_traces_lp():
     print("gCO2:", round(carbon_emitted, 2), "g")
     print("Bytes left:", bytes_left, "GB")
 
-def execute_two_jobs_three_nodes_lp():
+def plan_N_jobs_three_nodes_lp():
     job_sizes = [10000.0, 5600.0, 7200.0, 2400.0, 6000.0] # Gigabytes
     first_hop_band = 10.0 # Gigabit per Sec
     deadlines = [160, 130, 120, 70, 100] # Steps from origin
@@ -357,7 +357,7 @@ def execute_two_jobs_three_nodes_lp():
     power_scale = 1/180
     thread_limit = 20
 
-    thrpt_limit = 0.35 # 40% of bandwidth
+    thrpt_limit = 0.4 # 40% of bandwidth
 
     envs = [
         gen.Environment(
@@ -453,10 +453,27 @@ def execute_two_jobs_three_nodes_lp():
             offset += deadlines[j]
 
     n_psteps = 3
-    # threads_plan = np.zeros(n_steps * n_psteps * n_jobs).reshape(n_steps, n_psteps, n_jobs)
+
     ref_env = envs[0]
-    print(ref_env.throughput_thread_curve(thrpt_plan[50], use_ceil=True))
+    upper_bound_threads = np.clip(ref_env.throughput_thread_curve(thrpt_plan, use_ceil=True), 0., thread_limit)
+    actual_threads = ref_env.throughput_thread_curve(thrpt_plan, no_round=True)
+    min_bounds = np.floor(n_psteps * (upper_bound_threads - actual_threads))
+
+    threads_plan = np.zeros(n_steps * n_psteps * n_jobs).reshape(n_steps, n_psteps, n_jobs)
+    for i in range(n_steps):
+        m = min_bounds[i]
+        for p in range(n_psteps):
+            for j in range(n_jobs):
+                if m[j] > 0:
+                    threads_plan[i, p, j] = upper_bound_threads[i, j] - 1
+                    m[j] -= 1
+                else:
+                    threads_plan[i, p, j] = upper_bound_threads[i, j]
+
+    print(threads_plan[50])
+    print(thrpt_plan[50])
+    return threads_plan
 
 
 if __name__ == "__main__":
-    execute_two_jobs_three_nodes_lp()
+    plan_N_jobs_three_nodes_lp()

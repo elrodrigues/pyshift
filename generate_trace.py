@@ -2,6 +2,7 @@ from datetime import timezone
 import random
 import math
 from numpy import ceil
+from numpy.typing import NDArray
 
 class Trace:
     def __init__(
@@ -128,8 +129,10 @@ class Environment:
         throughput: float = self.thrpt_limit * (1 - (1 / (self.thrpt_scale * self.thrpt_limit * thread + 1)))
         return throughput
 
-    def throughput_thread_curve(self, thrpt: float, use_ceil=False) -> float:
+    def throughput_thread_curve(self, thrpt, use_ceil=False, no_round=False):
         threads: float = thrpt / ((self.thrpt_limit * self.thrpt_scale) * (self.thrpt_limit - thrpt))
+        if no_round:
+            return threads
         if use_ceil:
             threads = ceil(threads)
         else:
