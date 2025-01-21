@@ -1,5 +1,6 @@
 from numpy._typing import NDArray
 from scipy.optimize import linprog
+from math import ceil
 import generate_trace as gen
 import numpy as np
 
@@ -268,12 +269,6 @@ def execute_one_job_multiple_traces_lp():
             bytes_transferred = (thrpt * time) / 8
             bytes_left -= bytes_transferred
 
-    # for s in range(n_steps-1, -1, -1):
-    #     if threads[s] != 0:
-    #         threads[s] = env.thread_limit
-    #         break
-
-    print("DEBUG: bytes_left", bytes_left)
     print("Timezones:", forecast.timezones)
     print("Worst-Case Heuristic Plan")
     print(threads.astype(int))
@@ -295,11 +290,6 @@ def execute_one_job_multiple_traces_lp():
     )
     thrpt_plan = np.append(res.x, np.zeros(n_steps - deadline))
     threads = np.array([env.throughput_thread_curve(t, use_ceil=False) for t in thrpt_plan]).astype(int)
-
-    # for s in range(n_steps-1, -1, -1):
-    #     if threads[s] != 0:
-    #         threads[s] = env.thread_limit
-    #         break
 
     print("LP Forecast")
     print(threads)
@@ -331,11 +321,6 @@ def execute_one_job_multiple_traces_lp():
             bytes_transferred = (thrpt * time) / 8
             bytes_left -= bytes_transferred
 
-    # for s in range(n_steps-1, -1, -1):
-    #     if threads[s] != 0:
-    #         threads[s] = env.thread_limit
-    #         break
-
     print("Timezones:", forecast.timezones)
     print("Heuristic Plan")
     print(threads.astype(int))
@@ -353,18 +338,123 @@ def execute_one_job_multiple_traces_lp():
     thrpt_plan = np.append(res.x, np.zeros(n_steps - deadline))
     threads = np.array([env.throughput_thread_curve(t, use_ceil=False) for t in thrpt_plan]).astype(int)
 
-    ## Augment last step
-    # for s in range(n_steps-1, -1, -1):
-    #     if threads[s] != 0:
-    #         threads[s] = env.thread_limit
-    #         break
-
     print("LP Forecast")
     print(threads)
     carbon_emitted, bytes_left = _estimate_carbon(threads, step_time, intensity_sums, env)
     print("gCO2:", round(carbon_emitted, 2), "g")
     print("Bytes left:", bytes_left, "GB")
 
+def execute_two_jobs_three_nodes_lp():
+    job_sizes = [10000.0, 5600.0, 7200.0, 2400.0, 6000.0] # Gigabytes
+    first_hop_band = 10.0 # Gigabit per Sec
+    deadlines = [160, 130, 120, 70, 100] # Steps from origin
+    n_days = 2 # Horizon
+    n_nodes = 3 # src - connector - dst
+    n_jobs = len(job_sizes)
+    thrpt_scale = 1/21
+    power_min_limit = 125.0
+    power_max_limit = 300.0
+    power_scale = 1/180
+    thread_limit = 20
+
+    thrpt_limit = 0.35 # 40% of bandwidth
+
+    envs = [
+        gen.Environment(
+            job_size=job_sizes[i],
+            first_hop_link_band=first_hop_band,
+            deadline=deadlines[i],
+            thread_limit=thread_limit
+        )
+        for i in range(n_jobs)
+    ]
+
+    tzs = [
+        [0, 4, 8],
+        [0, 0, 4],
+        [0, 8, 8],
+        [0, 8, 12],
+        [0, 8, 4]
+    ]
+
+    max_throughput = first_hop_band
+    for env in envs:
+        env.set_throughput_curve(thrpt_scale, max_throughput)
+        env.set_power_curve(power_scale, power_min_limit, power_max_limit)
+
+    forecasts = [
+        gen.create_trace(n_days, n_nodes, use_timezones=tzs[i])
+        for i in range(n_jobs)
+    ]
+    for forecast in forecasts[1:]:
+        forecast.multi_intensities[0] = forecasts[0].multi_intensities[0]
+
+    n_steps = n_days * forecasts[0].steps_per_day
+    step_time = (24 / forecasts[0].steps_per_day) * 3600 # seconds
+
+    weights = np.ones(n_nodes).reshape(n_nodes, 1)
+    forecast_sums = [
+        (weights * forecast.multi_intensities).sum(axis=0)
+        for forecast in forecasts
+    ]
+
+    # LP constraints
+    deadline_sum = np.sum(deadlines)
+    intensity_vector = np.array([])
+    for i in range(n_jobs):
+        intensity_vector = np.append(intensity_vector, forecast_sums[i][:deadlines[i]])
+    intensity_vector = intensity_vector.reshape(1, deadline_sum)
+
+    target_thrpt = max_throughput * thrpt_limit
+    # A_ub - order matters
+    A_ub = np.array([])
+    offset = 0
+    for i in range(n_jobs):
+        byte_sum_vec = np.zeros(deadline_sum)
+        end_index = offset + deadlines[i]
+        byte_sum_vec[offset:end_index] = -step_time * np.ones(deadlines[i])
+        # byte_sum_vec = byte_sum_vec.reshape(1, deadline_sum)
+        A_ub = np.append(A_ub, byte_sum_vec)
+        offset += deadlines[i]
+
+    max_deadline = max(deadlines)
+    for i in range(max_deadline):
+        v = np.zeros(deadline_sum)# .reshape(1, deadline_sum)
+
+        offset = 0
+        for d in deadlines:
+            if i < d:
+                v[offset + i] = 1.
+            offset += d
+
+        A_ub = np.append(A_ub, v)
+
+    A_ub = A_ub.reshape(max_deadline + n_jobs, deadline_sum)
+
+    # b_ub - same order
+    b_ub = byte_vector = -8 * np.array(job_sizes)
+    b_ub = np.append(b_ub, target_thrpt * np.ones(max_deadline))
+
+    res = linprog(
+        c=intensity_vector,
+        A_ub=A_ub,
+        b_ub=b_ub,
+        bounds=(0, target_thrpt),
+    )
+
+    # merge plan
+    thrpt_plan = np.zeros(n_steps * n_jobs).reshape(n_steps, n_jobs)
+    thrpt_unprocessed = res.x
+    for i in range(max_deadline):
+        offset = 0
+        for j in range(n_jobs):
+            if i < deadlines[j]:
+                thrpt_plan[i, j] = thrpt_unprocessed[offset + i]
+            offset += deadlines[j]
+
+
+
+
 
 if __name__ == "__main__":
-    execute_one_job_multiple_traces_lp()
+    execute_two_jobs_three_nodes_lp()
