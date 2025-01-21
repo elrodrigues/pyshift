@@ -1,6 +1,7 @@
 from datetime import timezone
 import random
 import math
+from numpy import ceil
 
 class Trace:
     def __init__(
@@ -130,7 +131,7 @@ class Environment:
     def throughput_thread_curve(self, thrpt: float, use_ceil=False) -> float:
         threads: float = thrpt / ((self.thrpt_limit * self.thrpt_scale) * (self.thrpt_limit - thrpt))
         if use_ceil:
-            threads = math.ceil(threads)
+            threads = ceil(threads)
         else:
             threads = round(threads, 0)
             if thrpt > 0. and threads == 0.:

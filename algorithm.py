@@ -452,8 +452,10 @@ def execute_two_jobs_three_nodes_lp():
                 thrpt_plan[i, j] = thrpt_unprocessed[offset + i]
             offset += deadlines[j]
 
-
-
+    n_psteps = 3
+    # threads_plan = np.zeros(n_steps * n_psteps * n_jobs).reshape(n_steps, n_psteps, n_jobs)
+    ref_env = envs[0]
+    print(ref_env.throughput_thread_curve(thrpt_plan[50], use_ceil=True))
 
 
 if __name__ == "__main__":
