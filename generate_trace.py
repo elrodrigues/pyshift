@@ -25,10 +25,11 @@ class Trace:
 def create_trace(days: int, nodes: int, use_timezones: list[int] | None = None) -> Trace:
     # suppose we sample carbon intensity
     # every 15 minutes: 24 * 4 = 96
-    intensities = [[0. for _ in range(96 * days)] for _ in range(nodes)]
+    steps_per_day = 24
+    intensities = [[0. for _ in range(steps_per_day * days)] for _ in range(nodes)]
 
     start_boundary = 0
-    end_boundary = 96
+    end_boundary = steps_per_day
 
     high_intensity_floor = 300.0
     low_intensity_floor = 100.0
@@ -42,6 +43,10 @@ def create_trace(days: int, nodes: int, use_timezones: list[int] | None = None) 
     if use_timezones is not None:
         timezones = use_timezones
 
+    consts = [20/96, 28/96]
+    _s1 = math.floor(consts[0] * steps_per_day)
+    _s2 = math.ceil(consts[1] * steps_per_day)
+
     for _ in range(days):
         low_intensity = low_intensity_floor + random.gauss(25.0, 5.0)
         diff = (high_intensity - low_intensity) / 2
@@ -49,7 +54,7 @@ def create_trace(days: int, nodes: int, use_timezones: list[int] | None = None) 
 
         for n in range(nodes):
             # 5 am to 7 am + time zone differences
-            start_solar = random.randint(20, 28) + start_boundary + timezones[n]
+            start_solar = random.randint(_s1, _s2) + start_boundary + timezones[n]
             # 7 pm to 5 pm
             end_solar = end_boundary - start_solar + start_boundary + timezones[n]
             time_diff = end_solar - start_solar
@@ -67,12 +72,12 @@ def create_trace(days: int, nodes: int, use_timezones: list[int] | None = None) 
                 low_int = sol(i)
                 intensities[n][i] = round(low_int + random.gauss(0.0, 0.1*low_int), 2)
 
-        start_boundary += 96
-        end_boundary += 96
+        start_boundary += steps_per_day
+        end_boundary += steps_per_day
 
     trace = Trace(
         n_days=days,
-        steps_per_day=96,
+        steps_per_day=steps_per_day,
         high_intensity=high_intensity,
         low_intensity=low_intensity_floor,
         multi_intensities=intensities,
