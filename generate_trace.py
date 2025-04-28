@@ -4,6 +4,16 @@ import math
 from numpy import ceil
 from numpy.typing import NDArray
 
+class SpaTempTrace:
+    def __init__(
+        self, n_days: int,
+        steps_per_day: int,
+        multi_intensities: list[list[list[float]]] = [],
+    ):
+        self.n_days: int = n_days
+        self.steps_per_day: int = steps_per_day
+        self.multi_intensities: list[list[float]] = multi_intensities
+
 class Trace:
     def __init__(
         self, n_days: int,
